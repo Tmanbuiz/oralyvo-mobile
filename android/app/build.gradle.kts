@@ -16,9 +16,27 @@ android {
         versionName = "0.1.0"
     }
 
+    // Release signing reads from environment variables so no secrets are
+    // committed to the repo. CI sets these from GitHub Actions secrets;
+    // locally, an unsigned release build is produced when they're unset.
+    signingConfigs {
+        create("release") {
+            val keystorePath = System.getenv("ORALYVO_KEYSTORE_PATH")
+            if (keystorePath != null) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("ORALYVO_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("ORALYVO_KEY_ALIAS")
+                keyPassword = System.getenv("ORALYVO_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (System.getenv("ORALYVO_KEYSTORE_PATH") != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
     }
 
