@@ -36,3 +36,65 @@ workflows:
             -scheme OralyvoApp \
             -destination "generic/platform=iOS Simulator" \
             CODE_SIGNING_ALLOWED=NO
+
+  ios-testflight:
+    name: iOS - signed build to TestFlight
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    working_directory: ios
+    # Manual start only (Codemagic UI) so every push doesn't upload a build.
+    # Uses the App Store Connect API key integration named "codemagic".
+    integrations:
+      app_store_connect: codemagic
+    environment:
+      xcode: latest
+      vars:
+        BUNDLE_ID: app.oralyvo.mobile
+    scripts:
+      - name: Install XcodeGen
+        script: |
+          brew install xcodegen
+      - name: Set build number
+        script: |
+          sed -i '' "s/CURRENT_PROJECT_VERSION: \"1\"/CURRENT_PROJECT_VERSION: \"$BUILD_NUMBER\"/" project.yml
+      - name: Generate placeholder app icon
+        script: |
+          mkdir -p OralyvoApp/Assets.xcassets/AppIcon.appiconset
+          echo '{"info":{"author":"xcode","version":1}}' > OralyvoApp/Assets.xcassets/Contents.json
+          echo '{"images":[{"filename":"icon-1024.png","idiom":"universal","platform":"ios","size":"1024x1024"}],"info":{"author":"xcode","version":1}}' > OralyvoApp/Assets.xcassets/AppIcon.appiconset/Contents.json
+          python3 - <<'PY'
+          import zlib, struct
+          n = 1024
+          c = n / 2
+          rows = []
+          for y in range(n):
+              row = bytearray([0])
+              for x in range(n):
+                  if (x - c) ** 2 + (y - c) ** 2 < 300 ** 2:
+                      row += bytes((255, 255, 255))
+                  else:
+                      row += bytes((79, 70, 229))
+              rows.append(bytes(row))
+          def chunk(t, d):
+              return struct.pack('>I', len(d)) + t + d + struct.pack('>I', zlib.crc32(t + d) & 0xffffffff)
+          png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', n, n, 8, 2, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(b''.join(rows), 9)) + chunk(b'IEND', b'')
+          open('OralyvoApp/Assets.xcassets/AppIcon.appiconset/icon-1024.png', 'wb').write(png)
+          PY
+      - name: Generate Xcode project
+        script: |
+          xcodegen generate
+      - name: Set up code signing
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          keychain add-certificates
+          xcode-project use-profiles
+      - name: Build signed IPA
+        script: |
+          xcode-project build-ipa --project OralyvoApp.xcodeproj --scheme OralyvoApp
+    artifacts:
+      - build/ios/ipa/*.ipa
+    publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
