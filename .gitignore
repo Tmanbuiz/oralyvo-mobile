@@ -1,0 +1,20 @@
+# ---- iOS / Xcode ----
+ios/OralyvoApp.xcodeproj/
+ios/DerivedData/
+ios/build/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+
+# ---- Android / Gradle ----
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+android/*.iml
+android/captures/
+android/.cxx/
+
+# ---- Common ----
+.DS_Store
+*.log
