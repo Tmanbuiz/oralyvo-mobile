@@ -1,33 +1,15 @@
-# Codemagic CI -- builds both apps so we can verify they compile without a
-# Mac or a full Android Studio setup being required anywhere. Starts as
-# plain unsigned/debug builds; code signing (Apple Developer team, Play
-# Console upload key) gets layered on once the apps are further along and
-# ready for TestFlight / internal testing tracks.
+# Codemagic CI -- builds the iOS app on a macOS runner so it compiles
+# without a Mac being required anywhere. The Android build lives in
+# .github/workflows/android.yml instead: Codemagic's free plan only
+# includes macOS minutes (Linux/Windows builds there are paid-only), while
+# GitHub Free gives 2,000 free Actions minutes/month on Linux for private
+# repos, so Android builds there at no cost.
+#
+# Starts as a plain unsigned/debug build; code signing (Apple Developer
+# team, App Store Connect API key) gets layered on once the app is further
+# along and ready for TestFlight.
 
 workflows:
-  android-dev-build:
-    name: Android - dev build
-    max_build_duration: 30
-    instance_type: linux_x2
-    working_directory: android
-    environment:
-      groups: []
-      vars:
-        PACKAGE_NAME: "app.oralyvo.mobile"
-    triggering:
-      events:
-        - push
-      branch_patterns:
-        - pattern: main
-          include: true
-      cancel_previous_builds: true
-    scripts:
-      - name: Assemble debug APK
-        script: |
-          gradle :app:assembleDebug --no-daemon
-    artifacts:
-      - android/app/build/outputs/apk/debug/*.apk
-
   ios-dev-build:
     name: iOS - dev build (simulator, unsigned)
     max_build_duration: 45
