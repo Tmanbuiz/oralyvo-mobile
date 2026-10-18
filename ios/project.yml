@@ -1,0 +1,32 @@
+name: OralyvoApp
+options:
+  bundleIdPrefix: app.oralyvo
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+
+settings:
+  MARKETING_VERSION: "0.1.0"
+  CURRENT_PROJECT_VERSION: "1"
+  SWIFT_VERSION: "5.0"
+
+targets:
+  OralyvoApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: OralyvoApp
+    info:
+      path: OralyvoApp/Info.plist
+      properties:
+        UILaunchScreen: {}
+        NSMicrophoneUsageDescription: "Oralyvo needs the microphone to record and transcribe your voice."
+        ITSAppUsesNonExemptEncryption: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.oralyvo.mobile
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_EMIT_LOC_STRINGS: true
+    scheme:
+      testTargets: []
+      gatherCoverageData: false
