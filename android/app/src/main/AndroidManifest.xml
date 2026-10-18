@@ -7,8 +7,8 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
-    <!-- No custom android:icon yet -- a real app icon (mipmap set) lands
-         with the store-listing work; Android falls back to a system
+    <!-- No custom android:icon yet; a real app icon (mipmap set) lands
+         with the store-listing work. Android falls back to a system
          default icon until then, which is fine for CI/dev builds. -->
     <application
         android:allowBackup="true"
