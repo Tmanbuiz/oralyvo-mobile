@@ -44,4 +44,13 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.1")
+
+    // Navigation between the sign-in / record / history screens.
+    implementation("androidx.navigation:navigation-compose:2.8.0")
+
+    // HTTP client for the Cloudflare Worker API (sign-in, sign-up, transcribe).
+    // org.json (used for request/response bodies) ships with the Android
+    // platform, so no separate JSON library dependency is needed.
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 }
