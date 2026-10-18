@@ -1,0 +1,56 @@
+# Codemagic CI -- builds both apps so we can verify they compile without a
+# Mac or a full Android Studio setup being required anywhere. Starts as
+# plain unsigned/debug builds; code signing (Apple Developer team, Play
+# Console upload key) gets layered on once the apps are further along and
+# ready for TestFlight / internal testing tracks.
+
+workflows:
+  android-dev-build:
+    name: Android - dev build
+    max_build_duration: 30
+    instance_type: linux_x2
+    working_directory: android
+    environment:
+      groups: []
+      vars:
+        PACKAGE_NAME: "app.oralyvo.mobile"
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
+    scripts:
+      - name: Assemble debug APK
+        script: |
+          gradle :app:assembleDebug --no-daemon
+    artifacts:
+      - android/app/build/outputs/apk/debug/*.apk
+
+  ios-dev-build:
+    name: iOS - dev build (simulator, unsigned)
+    max_build_duration: 45
+    instance_type: mac_mini_m2
+    working_directory: ios
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+      cancel_previous_builds: true
+    scripts:
+      - name: Install XcodeGen
+        script: |
+          brew install xcodegen
+      - name: Generate Xcode project
+        script: |
+          xcodegen generate
+      - name: Build for Simulator (no signing needed)
+        script: |
+          xcodebuild build \
+            -project OralyvoApp.xcodeproj \
+            -scheme OralyvoApp \
+            -destination "generic/platform=iOS Simulator" \
+            CODE_SIGNING_ALLOWED=NO
