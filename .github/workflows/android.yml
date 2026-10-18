@@ -1,0 +1,46 @@
+name: Android build
+
+# Runs on GitHub's free hosted Linux runners -- GitHub Free includes 2,000
+# Actions minutes/month for private repos, Linux minutes counted at 1x, so
+# this costs nothing. (Codemagic's free plan only covers macOS minutes;
+# Linux/Windows builds there are paid-only, which is why Android now builds
+# here instead and codemagic.yaml keeps just the iOS workflows.)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'android/**'
+  workflow_dispatch: {}
+
+jobs:
+  assemble-debug:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Assemble debug APK
+        working-directory: android
+        run: gradle :app:assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: oralyvo-android-debug
+          path: android/app/build/outputs/apk/debug/*.apk
