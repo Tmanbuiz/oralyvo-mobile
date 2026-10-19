@@ -28,6 +28,8 @@ xcodebuild build -project OralyvoApp.xcodeproj -scheme OralyvoApp \
 
 The GitHub `iOS build` workflow compiles on macOS and saves a simulator app artifact. A simulator app cannot be installed on an iPhone.
 
+The signed workflow checks installed App Store provisioning profiles against the signing identities in the build keychain, then writes an explicit `signing.xcconfig` and export-options plist for the exact app bundle. Archive and export use the same profile, team and certificate. If no matching profile/private-key pair exists, the preflight stops with a specific error before archiving. Optional Codemagic secret `CERTIFICATE_PRIVATE_KEY` can supply a reusable PEM signing key; keep it out of the repository and logs. Without it, the existing fresh-key flow remains in use and is subject to the Apple account's certificate availability.
+
 After the build passes, run Codemagic's existing **ios-testflight** workflow on the approved branch/commit. It uses the existing App Store Connect integration and uploads a signed build. Wait for Apple processing, then install the new version in TestFlight. Updating source alone does not change an already-installed app. Confirm the build number exceeds the previous App Store Connect build number.
 
 ## Device verification before distribution

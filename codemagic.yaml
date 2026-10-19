@@ -5,9 +5,9 @@
 # GitHub Free gives 2,000 free Actions minutes/month on Linux for private
 # repos, so Android builds there at no cost.
 #
-# Starts as a plain unsigned/debug build; code signing (Apple Developer
-# team, App Store Connect API key) gets layered on once the app is further
-# along and ready for TestFlight.
+# Simulator builds are unsigned. The manual TestFlight workflow imports
+# signing assets, validates a matching profile/identity pair, then uses the
+# same explicit signing configuration for archive and export.
 
 workflows:
   ios-dev-build:
@@ -85,16 +85,31 @@ workflows:
           xcodegen generate
       - name: Set up code signing
         script: |
-          # An older distribution certificate already exists in the Apple account
-          # but its private key isn't available here, so make a fresh key for this build.
-          ssh-keygen -t rsa -b 2048 -m PEM -f "$HOME/oralyvo_cert_key" -N "" -q
+          set -euo pipefail
+          umask 077
+          signing_key="$HOME/oralyvo_cert_key"
+          trap 'rm -f "$signing_key" "$signing_key.pub"' EXIT
+          if [ -n "${CERTIFICATE_PRIVATE_KEY:-}" ]; then
+            printf '%s' "$CERTIFICATE_PRIVATE_KEY" > "$signing_key"
+          else
+            ssh-keygen -t rsa -b 2048 -m PEM -f "$signing_key" -N "" -q
+          fi
           keychain initialize
-          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create --certificate-key @file:$HOME/oralyvo_cert_key
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create --certificate-key "@file:$signing_key"
           keychain add-certificates
-          xcode-project use-profiles
+          python3 ../scripts/ios_signing.py --bundle-id "$BUNDLE_ID" --output build/signing
       - name: Build signed IPA
         script: |
-          xcode-project build-ipa --project OralyvoApp.xcodeproj --scheme OralyvoApp
+          set -euo pipefail
+          xcodebuild archive \
+            -project OralyvoApp.xcodeproj -scheme OralyvoApp \
+            -configuration Release -destination "generic/platform=iOS" \
+            -archivePath build/ios/OralyvoApp.xcarchive \
+            -xcconfig build/signing/signing.xcconfig
+          xcodebuild -exportArchive \
+            -archivePath build/ios/OralyvoApp.xcarchive \
+            -exportOptionsPlist build/signing/export_options.plist \
+            -exportPath build/ios/ipa
     artifacts:
       - build/ios/ipa/*.ipa
     publishing:
