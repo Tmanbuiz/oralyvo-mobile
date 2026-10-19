@@ -3,7 +3,7 @@
 
     <!-- INTERNET: talks to the Speech2Text-Pro Cloudflare Worker backend.
          RECORD_AUDIO: microphone capture for transcription (added now so it
-         lands in review once; actual recording code is a follow-up commit). -->
+         lands in review once; recording is handled by the native recorder). -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
@@ -11,7 +11,7 @@
          with the store-listing work. Android falls back to a system
          default icon until then, which is fine for CI/dev builds. -->
     <application
-        android:allowBackup="true"
+        android:allowBackup="false"
         android:label="@string/app_name"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false">

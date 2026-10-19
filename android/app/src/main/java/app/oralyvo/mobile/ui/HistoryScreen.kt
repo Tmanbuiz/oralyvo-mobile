@@ -1,86 +1,80 @@
 package app.oralyvo.mobile.ui
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Divider
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import app.oralyvo.mobile.data.HistoryStore
-import app.oralyvo.mobile.data.TranscriptEntry
+import app.oralyvo.mobile.data.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Local-only list of past transcripts -- see HistoryStore for why there is
- *  no backend history endpoint yet. */
 @Composable
 fun HistoryScreen(onBack: () -> Unit) {
     val context = LocalContext.current
-    val historyStore = remember { HistoryStore(context) }
-    var entries by remember { mutableStateOf(historyStore.all()) }
-
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(text = "History", style = MaterialTheme.typography.headlineMedium)
-            TextButton(onClick = onBack) {
-                Text("Back")
-            }
-        }
-
-        if (entries.isEmpty()) {
-            Text(
-                text = "No transcripts yet. Record something to see it here.",
-                modifier = Modifier.padding(top = 24.dp)
-            )
-        } else {
-            LazyColumn(modifier = Modifier.padding(top = 16.dp)) {
-                items(entries, key = { it.id }) { entry ->
-                    TranscriptRow(entry)
-                    Divider(modifier = Modifier.padding(vertical = 12.dp))
+    val store = remember { TokenStore(context) }
+    val api = remember { ApiClient(store) }
+    val scope = rememberCoroutineScope()
+    var entries by remember { mutableStateOf(emptyList<TranscriptEntry>()) }
+    var loading by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    val formatter = remember { SimpleDateFormat("MMM d, yyyy · h:mm a", Locale.getDefault()) }
+    suspend fun load() {
+        if (loading) return
+        val id = store.session()?.userId ?: return
+        loading = true; message = null
+        try {
+            val local = try { withContext(Dispatchers.IO) { HistoryStore(context, id).all() } }
+                catch (_: Exception) { message = "Offline history could not be read. Loading your account history."; emptyList() }
+            entries = local
+            when (val response = api.history()) {
+                is ApiResult.Success -> {
+                    entries = (local + response.data).associateBy { it.id }.values.sortedByDescending { it.createdAtMillis }
                 }
+                is ApiResult.Failure -> { message = response.message + " Showing offline copies for this account." }
+            }
+        } finally { loading = false }
+    }
+    LaunchedEffect(Unit) { load() }
+    Column(Modifier.fillMaxSize().padding(24.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("History", style = MaterialTheme.typography.headlineMedium)
+            TextButton(onClick = onBack) { Text("Back") }
+        }
+        TextButton(enabled = !loading, onClick = { scope.launch { load() } }) { Text("Refresh") }
+        if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        message?.let { Text(it, modifier = Modifier.padding(vertical = 8.dp)) }
+        if (entries.isEmpty() && !loading) Text("No saved text yet. Record something to get started.")
+        LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            items(entries, key = { it.id }) { entry ->
+                Text(formatter.format(Date(entry.createdAtMillis)), style = MaterialTheme.typography.labelMedium)
+                Text(if (entry.cloudSaved) "Saved to account" else "Offline copy", style = MaterialTheme.typography.labelSmall)
+                ResultCard(entry, busy = loading, onSave = {
+                    loading = true
+                    scope.launch {
+                        try {
+                            when (val result = api.save(entry)) {
+                                is ApiResult.Success -> {
+                                    val saved = entry.copy(cloudSaved = true)
+                                    entries = entries.map { if (it.id == entry.id) saved else it }
+                                    withContext(Dispatchers.IO) { HistoryStore(context, store.session()!!.userId).add(saved) }
+                                    message = "Saved to your Oralyvo account."
+                                }
+                                is ApiResult.Failure -> { message = result.message }
+                            }
+                        } catch (_: Exception) { message = "Could not update the offline copy. Refresh to check your account history." }
+                        finally { loading = false }
+                    }
+                })
+                HorizontalDivider()
             }
         }
     }
-}
-
-@Composable
-private fun TranscriptRow(entry: TranscriptEntry) {
-    val dateFormat = remember { SimpleDateFormat("MMM d, h:mm a", Locale.getDefault()) }
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-            text = "${dateFormat.format(Date(entry.createdAtMillis))} · ${formatDuration(entry.durationMillis)}",
-            style = MaterialTheme.typography.labelMedium
-        )
-        Text(
-            text = entry.text,
-            style = MaterialTheme.typography.bodyLarge,
-            modifier = Modifier.padding(top = 4.dp)
-        )
-    }
-}
-
-private fun formatDuration(durationMillis: Long): String {
-    val totalSeconds = durationMillis / 1000
-    val minutes = totalSeconds / 60
-    val seconds = totalSeconds % 60
-    return "%d:%02d".format(minutes, seconds)
 }

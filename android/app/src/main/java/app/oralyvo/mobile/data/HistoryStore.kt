@@ -1,63 +1,39 @@
 package app.oralyvo.mobile.data
 
 import android.content.Context
+import android.util.AtomicFile
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.UUID
 
-/**
- * Local-only transcript history, stored as a small JSON file under the
- * app's private files directory -- no server-side history endpoint exists
- * yet (and none is needed for this device-only MVP), and a JSON file avoids
- * pulling in a Room/SQLite dependency for what is currently a short list.
- * Not shared across devices; that is a deliberate scope cut, not an
- * oversight -- revisit if/when the backend grows a /api/history endpoint.
- */
-class HistoryStore(context: Context) {
-    private val file: File = File(context.applicationContext.filesDir, "history.json")
-
-    @Synchronized
-    fun all(): List<TranscriptEntry> {
-        if (!file.exists()) return emptyList()
-        return try {
-            val array = JSONArray(file.readText())
-            (0 until array.length()).map { i ->
-                val o = array.getJSONObject(i)
-                TranscriptEntry(
-                    id = o.getString("id"),
-                    createdAtMillis = o.getLong("createdAtMillis"),
-                    text = o.getString("text"),
-                    durationMillis = o.optLong("durationMillis", 0L)
-                )
-            }.sortedByDescending { it.createdAtMillis }
-        } catch (err: Exception) {
-            // A corrupted or partially-written file should not crash the
-            // history screen -- treat it as empty rather than propagate.
-            emptyList()
-        }
+/** Account-scoped private offline copies. The old shared history.json is
+ * preserved on disk but never exposed or assigned to an arbitrary account. */
+class HistoryStore(context: Context, userId: String) {
+    private val file: AtomicFile
+    init {
+        UUID.fromString(userId)
+        file = AtomicFile(File(context.applicationContext.filesDir, "history-$userId.json"))
     }
-
-    @Synchronized
-    fun add(text: String, durationMillis: Long): TranscriptEntry {
-        val entry = TranscriptEntry(
-            id = UUID.randomUUID().toString(),
-            createdAtMillis = System.currentTimeMillis(),
-            text = text,
-            durationMillis = durationMillis
-        )
-        val updated = all() + entry
+    fun all(): List<TranscriptEntry> = synchronized(lock) {
+        if (!file.baseFile.exists()) return@synchronized emptyList()
+        val array = JSONArray(String(file.readFully()))
+        (0 until array.length()).map { i ->
+            val item = array.getJSONObject(i)
+            TranscriptEntry(item.getString("id"), item.getLong("createdAtMillis"), item.getString("text"),
+                item.optLong("durationMillis"), item.optString("type", "transcript"), item.optBoolean("cloudSaved"))
+        }.sortedByDescending { it.createdAtMillis }
+    }
+    fun add(entry: TranscriptEntry) = synchronized(lock) {
+        val entries = all().filterNot { it.id == entry.id } + entry
         val array = JSONArray()
-        updated.forEach { e ->
-            array.put(
-                JSONObject()
-                    .put("id", e.id)
-                    .put("createdAtMillis", e.createdAtMillis)
-                    .put("text", e.text)
-                    .put("durationMillis", e.durationMillis)
-            )
+        entries.forEach { item ->
+            array.put(JSONObject().put("id", item.id).put("createdAtMillis", item.createdAtMillis)
+                .put("text", item.text).put("durationMillis", item.durationMillis).put("type", item.type).put("cloudSaved", item.cloudSaved))
         }
-        file.writeText(array.toString())
-        return entry
+        val out = file.startWrite()
+        try { out.write(array.toString().toByteArray()); file.finishWrite(out) }
+        catch (error: Exception) { file.failWrite(out); throw error }
     }
+    companion object { private val lock = Any() }
 }
