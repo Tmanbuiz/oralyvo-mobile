@@ -1,0 +1,59 @@
+name: iOS build
+on:
+  push:
+    paths: ['ios/**', 'tools/mcp-checks/**', '.github/workflows/ios.yml']
+  pull_request:
+    paths: ['ios/**', 'tools/mcp-checks/**', '.github/workflows/ios.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  simulator:
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Compile iPhone app
+        working-directory: ios
+        run: >-
+          xcodebuild build -project OralyvoApp.xcodeproj -scheme OralyvoApp
+          -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath build CODE_SIGNING_ALLOWED=NO
+      - name: Test welcome and sign-in navigation
+        working-directory: ios
+        run: |
+          DEVICE_ID=$(xcrun simctl list devices available -j | python3 -c 'import json,sys; d=json.load(sys.stdin); print(next(x["udid"] for group in d["devices"].values() for x in group if x["name"].startswith("iPhone")))')
+          xcodebuild test -project OralyvoApp.xcodeproj -scheme OralyvoApp \
+            -destination "platform=iOS Simulator,id=$DEVICE_ID" \
+            -derivedDataPath build -resultBundlePath build/LaunchTests.xcresult \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Save simulator app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Oralyvo-iOS-simulator
+          path: ios/build/Build/Products/Debug-iphonesimulator/OralyvoApp.app
+      - name: Save test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Oralyvo-iOS-test-results
+          path: ios/build/LaunchTests.xcresult
+  mcp-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci --ignore-scripts
+        working-directory: tools/mcp-checks
+      - run: npm test
+        working-directory: tools/mcp-checks
+        env:
+          MCP_USE_ANONYMIZED_TELEMETRY: 'false'
