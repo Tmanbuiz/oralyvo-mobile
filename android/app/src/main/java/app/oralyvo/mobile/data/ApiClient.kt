@@ -32,8 +32,9 @@ class ApiClient(
         val obj = try { JSONObject(response.body?.string().orEmpty()) } catch (_: Exception) { JSONObject() }
         response.code to obj
     }
-    private suspend fun renew(failedToken: String): AuthSession = refreshLock.withLock {
+    private suspend fun renew(failedToken: String, ownerId: String): AuthSession = refreshLock.withLock {
         val old = tokenStore.session() ?: throw IllegalStateException("Please sign in again.")
+        check(old.userId == ownerId) { "Account changed. Please retry." }
         if (old.accessToken != failedToken) return@withLock old
         val refresh = old.refreshToken ?: throw IllegalStateException("Please sign out and sign in again to renew your session.")
         val (healthCode, health) = execute(Request.Builder().url(baseUrl + "/api/health").build())
@@ -54,12 +55,14 @@ class ApiClient(
     }
     private suspend fun authorized(request: Request): JSONObject {
         var session = tokenStore.session() ?: throw IllegalStateException("Please sign in first.")
-        if (session.expiresAt < System.currentTimeMillis() / 1000 + 60) session = renew(session.accessToken)
+        val ownerId = session.userId
+        if (session.expiresAt < System.currentTimeMillis() / 1000 + 60) session = renew(session.accessToken, ownerId)
         var response = execute(request.newBuilder().header("Authorization", "Bearer ${session.accessToken}").build())
         if (response.first == 401) {
-            session = renew(session.accessToken)
+            session = renew(session.accessToken, ownerId)
             response = execute(request.newBuilder().header("Authorization", "Bearer ${session.accessToken}").build())
         }
+        check(tokenStore.session()?.userId == ownerId) { "Account changed. Please retry." }
         check(response.first in 200..299) { error(response.second, response.first) }
         return response.second
     }

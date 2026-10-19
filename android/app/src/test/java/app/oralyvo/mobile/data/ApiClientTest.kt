@@ -2,6 +2,8 @@ package app.oralyvo.mobile.data
 
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.RecordedRequest
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
 import okhttp3.tls.HandshakeCertificates
@@ -54,6 +56,17 @@ class ApiClientTest {
         assertEquals("Bearer new-access", retry.getHeader("Authorization"))
         assertEquals(initial.body.readUtf8(), retry.body.readUtf8())
         assertEquals("new-refresh", store.value?.refreshToken)
+    }
+    @Test fun accountSwitchNeverRetriesOldTextWithNewAccountCredentials() = runBlocking {
+        server.dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                store.value = AuthSession("other-access", "other-refresh", UUID.randomUUID().toString(), "other@example.invalid", Long.MAX_VALUE)
+                return MockResponse().setResponseCode(401).setBody("{}")
+            }
+        }
+        val result = api.save(TranscriptEntry("private-entry", 1L, "First account only"))
+        assertTrue(result is ApiResult.Failure)
+        assertEquals(1, server.requestCount)
     }
     @Test fun transcriptionUploadsAudioWithRecognizedFilenameAndRejectsEmptySpeech() = runBlocking {
         val file = File.createTempFile("test-recording", ".m4a").apply { writeBytes(byteArrayOf(1, 2, 3)) }
