@@ -29,5 +29,19 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_EMIT_LOC_STRINGS: true
     scheme:
-      testTargets: []
+      testTargets:
+        - OralyvoAppUITests
       gatherCoverageData: false
+
+  OralyvoAppUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: OralyvoAppUITests
+    dependencies:
+      - target: OralyvoApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.oralyvo.mobile.uitests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: OralyvoApp
