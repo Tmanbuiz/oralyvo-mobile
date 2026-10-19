@@ -45,7 +45,7 @@ fun OralyvoApp() {
     val context = LocalContext.current
     val tokenStore = remember { TokenStore(context) }
     val navController = rememberNavController()
-    val startDestination = if (tokenStore.isSignedIn()) Routes.RECORD else Routes.AUTH
+    val startDestination = remember { if (tokenStore.isSignedIn()) Routes.RECORD else Routes.AUTH }
 
     MaterialTheme {
         Surface(modifier = Modifier.fillMaxSize()) {

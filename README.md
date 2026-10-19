@@ -62,6 +62,22 @@ The local MCP endpoint is `http://127.0.0.1:3000/mcp`. Tools:
 
 `npm test` exercises real MCP initialize/list/call requests with a fixture backend and verifies safe output and network failure handling. `check:live` calls the actual public health endpoint. Neither substitutes for Xcode compilation or physical-device checks.
 
-## Android
+## Android version 0.2.0
 
-The Android implementation is in `android/`; GitHub Actions builds it separately. This change focuses on the iPhone scaffold and does not change Android behavior.
+The Android implementation in `android/` now provides the same recording-then-transcription flow, translation, AI notes, cloud history, and native sharing. Authentication uses the hosted Oralyvo email account pages for Turnstile, account creation, verification instructions and password recovery. Embedded social-provider authentication is not included.
+
+Sessions use AES-GCM encryption with a non-exportable Android Keystore key and a session file excluded from backup. Existing plaintext sessions migrate when readable. Tokens renew through the configured account provider. Offline history is isolated by account ID. The original shared `history.json` is preserved on disk but hidden because old entries have no owner information and cannot safely be assigned to an account.
+
+Recording stops when leaving the foreground and is capped at 20 minutes. Stop and Transcribe are separate actions; failed transcription keeps the clip available within the current screen session. Text is copied to account-specific offline history. **Save to account** uploads it to cloud history, also visible on iPhone/web. Audio clips are temporary and are replaced by a new recording or removed when leaving the recording session.
+
+GitHub's **Android build** workflow runs JVM API contract tests, Android lint, debug APK compilation, and emulator tests for launch, encrypted storage and account isolation. On `main` it also builds the release AAB. Local equivalents with JDK 17, Android SDK 34 and Gradle 8.9 installed:
+
+```sh
+cd android
+gradle :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
+gradle :app:connectedDebugAndroidTest  # requires a running emulator/device
+```
+
+Download `oralyvo-android-debug` from a successful Actions run to obtain the installable debug APK. `oralyvo-android-release-aab` is a Play Console bundle; it is only release-signed when the existing keystore secrets are configured. A debug APK may require uninstalling an existing app signed with another key, which removes its local data; save needed transcripts to your account first.
+
+Before distributing, verify email sign-in and Turnstile on a real device; deny/restore microphone permission; record, background and return; transcribe in normal/offline conditions; translate, generate notes and save; compare History with the web app; sign out and switch accounts; and confirm session renewal. Tests use fixtures and emulator accounts, not a real production user.
