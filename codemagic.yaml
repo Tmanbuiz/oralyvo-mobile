@@ -85,8 +85,11 @@ workflows:
           xcodegen generate
       - name: Set up code signing
         script: |
+          # An older distribution certificate already exists in the Apple account
+          # but its private key isn't available here, so make a fresh key for this build.
+          ssh-keygen -t rsa -b 2048 -m PEM -f "$HOME/oralyvo_cert_key" -N "" -q
           keychain initialize
-          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create
+          app-store-connect fetch-signing-files "$BUNDLE_ID" --type IOS_APP_STORE --create --certificate-key @file:$HOME/oralyvo_cert_key
           keychain add-certificates
           xcode-project use-profiles
       - name: Build signed IPA
