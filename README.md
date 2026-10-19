@@ -1,56 +1,67 @@
-# oralyvo-mobile
+# Oralyvo mobile
 
-Native iOS (Swift/SwiftUI) and Android (Kotlin/Jetpack Compose) apps for
-[Oralyvo](https://oralyvo.app) -- two separate codebases, not a shared
-Flutter/React Native app, by design.
+Native iOS (SwiftUI) and Android (Kotlin/Jetpack Compose) clients for [Oralyvo](https://oralyvo.app), using the existing [Speech2Text-Pro](https://github.com/Tmanbuiz/Speech2Text-Pro) Cloudflare backend.
 
-Both apps are clients to the **existing** Cloudflare Worker backend in
-[Speech2Text-Pro](https://github.com/Tmanbuiz/Speech2Text-Pro) (same one that
-powers oralyvo.app). No backend changes are needed for either app -- they
-call the same REST API the web app already uses.
+## iPhone version 0.2.0
 
-## Layout
+Replaces the static scaffold screen with:
 
-- `/ios` -- SwiftUI app. Project file is **generated**, not committed --
-  see below.
-- `/android` -- Kotlin + Jetpack Compose app, plain Gradle project.
-- `/codemagic.yaml` -- CI config. Builds both apps on push to `main`.
+- Sign-in, account creation and password recovery through the existing Oralyvo account pages. Only authentication uses WKWebView; email/password is supported here. Social-provider buttons are hidden because embedded OAuth is restricted by some providers. Social-only users can set a password using password recovery.
+- Keychain session storage and refresh through the public account configuration returned by `/api/health`.
+- Native microphone recording, up to 20 minutes per clip, and accurate transcription after stopping via `/api/transcribe`.
+- Translation and AI notes via `/api/process`.
+- Save transcripts/results to account history, read existing cloud history, and share text using the native share sheet.
+- Visible errors and retry controls. Failed transcription preserves the current recording for retry within the current screen session.
 
-## Why no Mac is needed
+This is recording-then-transcription, not streaming Live AI. Keep the app open while recording. Moving the app out of the foreground or receiving an audio interruption stops recording. Unsaved recordings and results are temporary: save the text to history or share it before starting again, signing out, or closing the app. Audio replay, background recording and real-time streaming are not included in this version.
 
-There's no Mac anywhere in this project's toolchain. The iOS project is
-defined by `ios/project.yml` ([XcodeGen](https://github.com/yonaskolb/XcodeGen)
-format) instead of a committed `.xcodeproj` -- XcodeGen turns that into a
-real Xcode project on demand. [Codemagic](https://codemagic.io) runs
-`xcodegen generate` on a macOS cloud runner, then builds it there. Android
-needs no special handling -- Gradle builds happen fine on Linux, which is
-what Codemagic (and the Android SDK/JDK already set up on the Windows dev
-machine) uses.
+## Build and release
 
-No `gradlew` wrapper is committed yet (the wrapper jar is a binary file,
-awkward to hand-author correctly without running `gradle wrapper` once
-somewhere). Opening `/android` in Android Studio will generate it
-automatically on first sync; CI calls the system `gradle` directly in the
-meantime.
+The Xcode project is generated from `ios/project.yml`:
 
-## Current state (scaffold stage)
+```sh
+cd ios
+xcodegen generate
+xcodebuild build -project OralyvoApp.xcodeproj -scheme OralyvoApp \
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO
+```
 
-Both apps are placeholder screens right now -- just enough to prove the
-build pipeline works end to end in CI, since there's no local way to verify
-an iOS build, and no Android Studio GUI used here either. Sign-in,
-recording, live/accurate transcription, and history come next, layered in
-incrementally so each change can be checked in CI before the next one lands
-on top of it.
+The GitHub `iOS build` workflow compiles on macOS and saves a simulator app artifact. A simulator app cannot be installed on an iPhone.
 
-Sign-in requires solving a Cloudflare Turnstile challenge (the same bot
-protection the web app uses) -- each app's sign-in screen will embed a small
-WebView/WKWebView just for that one step, since there's no native Turnstile
-SDK for iOS/Android.
+After the build passes, run Codemagic's existing **ios-testflight** workflow on the approved branch/commit. It uses the existing App Store Connect integration and uploads a signed build. Wait for Apple processing, then install the new version in TestFlight. Updating source alone does not change an already-installed app. Confirm the build number exceeds the previous App Store Connect build number.
 
-## CI
+## Device verification before distribution
 
-See `codemagic.yaml`. Right now both workflows build unsigned/debug
-artifacts on every push to `main`, so a broken build fails fast. Code
-signing (Apple Developer team provisioning, Play Console upload key) gets
-added once the apps are far enough along to actually install on a real
-device / submit to TestFlight or Play's internal testing track.
+1. Launch without an account: welcome screen offers sign-in rather than the old scaffold text.
+2. Sign in with email/password and complete Turnstile. Verify wrong credentials and offline loading give recoverable errors.
+3. Deny microphone permission: explanation appears. Enable permission in iOS Settings and retry.
+4. Record a short clip, stop, transcribe, and compare the text with the spoken words.
+5. Interrupt recording by locking/backgrounding or taking a call: recording stops and can be transcribed after returning.
+6. Disconnect before transcription: error appears and reconnect/retry uses the retained recording.
+7. Translate, generate AI notes, save each result, and find it in History and the web app.
+8. Sign out and sign into a different account: previous account history and unsaved text are absent.
+9. Leave the session long enough to expire, then verify token renewal and an authenticated request.
+10. Confirm share actions work on a physical iPhone and test a near-limit clip.
+
+## mcp-use developer checks
+
+`tools/mcp-checks` uses [mcp-use](https://github.com/mcp-use/mcp-use) 2.10.1 for read-only developer tools. SDK telemetry is explicitly disabled before import. These tools accept no account credentials, do not read transcripts, and do not modify either repository or the backend.
+
+```sh
+cd tools/mcp-checks
+npm ci --ignore-scripts
+npm test
+npm run check:live
+npm start
+```
+
+The local MCP endpoint is `http://127.0.0.1:3000/mcp`. Tools:
+
+- `check-backend`: public deployment readiness, returned as capability booleans only.
+- `inspect-ios-entry`: source inventory and detection of the original placeholder.
+
+`npm test` exercises real MCP initialize/list/call requests with a fixture backend and verifies safe output and network failure handling. `check:live` calls the actual public health endpoint. Neither substitutes for Xcode compilation or physical-device checks.
+
+## Android
+
+The Android implementation is in `android/`; GitHub Actions builds it separately. This change focuses on the iPhone scaffold and does not change Android behavior.
