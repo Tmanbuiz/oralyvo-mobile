@@ -21,3 +21,6 @@ android/.cxx/
 
 # Developer MCP tools
 node_modules/
+
+# Python signing configuration tests
+__pycache__/
