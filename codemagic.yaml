@@ -47,6 +47,8 @@ workflows:
     integrations:
       app_store_connect: codemagic
     environment:
+      groups:
+        - oralyvo_ios
       xcode: latest
       vars:
         BUNDLE_ID: app.oralyvo.mobile
